@@ -1,0 +1,6 @@
+@Projet_Fil_Rouge_HostAddress = http://localhost:5002
+
+GET {{Projet_Fil_Rouge_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
