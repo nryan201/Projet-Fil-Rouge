@@ -1,12 +1,17 @@
+using DotNetEnv;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Projet_Fil_Rouge;
+using Projet_Fil_Rouge.Auth;
 using Projet_Fil_Rouge.BLL;
-using System;
-using System.Xml.Serialization;
 using Projet_Fil_Rouge.Entities;
 
+
+
 var builder = WebApplication.CreateBuilder(args);
+Env.Load();
+
+var jwtKey = Environment.GetEnvironmentVariable("JwtKey") ?? throw new InvalidOperationException("JwtKey manquant");
 
 // Add services to the container.
 
@@ -19,6 +24,7 @@ builder.Services
 builder.Services.AddScoped<CredentialBLL>();
 builder.Services.AddScoped<IPasswordHasher<Credential>, PasswordHasher<Credential>>();
 builder.Services.AddControllers();
+builder.Services.AddJwtAuth(jwtKey);
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -33,9 +39,10 @@ if (app.Environment.IsDevelopment())
 }
 app.MapHealthChecks("/health/db");
 app.UseHttpsRedirection();
-
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
 app.Run();
+

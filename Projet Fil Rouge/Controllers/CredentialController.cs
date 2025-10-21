@@ -16,12 +16,12 @@ namespace Projet_Fil_Rouge.Controllers
             _credentialBll = credentialBll;
         }
 
-        [AllowAnonymous]
+        [Authorize]
         [HttpGet]
         [Route("Getcredentials")]
         public async Task<IActionResult> GetCredentials()
         {
-            
+
             var result = await _credentialBll.GetCredentials();
             return Ok(result);
         }
@@ -31,7 +31,7 @@ namespace Projet_Fil_Rouge.Controllers
         [Route("register")]
         public async Task<IActionResult> PostCredential([FromBody] CreateCredentialRequest credential)
         {
-            
+
             return Ok(await _credentialBll.CreateCredential(credential));
         }
 
@@ -44,6 +44,28 @@ namespace Projet_Fil_Rouge.Controllers
 
         }
 
+        [AllowAnonymous]
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshRequest req, CancellationToken ct)
+        {
+            var rsp = await _credentialBll.RefreshAsync(req.RefreshToken, ct);
+            return Ok(rsp); 
+        }
 
+
+        [Authorize]
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout([FromBody] RefreshRequest req, CancellationToken ct)
+        {
+            try
+            {
+                await _credentialBll.RevokeRefreshTokenAsync(req.RefreshToken, ct);
+                return NoContent(); // 204
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }
