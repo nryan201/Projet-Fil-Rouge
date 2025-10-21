@@ -1,5 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using CredentialEntity = Projet_Fil_Rouge.Dto.Credentials;
+using CredentialEntity = Projet_Fil_Rouge.Entities.Credential;
 namespace Projet_Fil_Rouge
 {
     public class AppDbContext : DbContext

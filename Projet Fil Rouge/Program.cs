@@ -1,8 +1,11 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Projet_Fil_Rouge;
 using Projet_Fil_Rouge.BLL;
 using System;
 using System.Xml.Serialization;
+using Projet_Fil_Rouge.Entities;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -14,7 +17,7 @@ builder.Services
     .AddHealthChecks()
     .AddSqlServer(connectionString);
 builder.Services.AddScoped<CredentialBLL>();
-
+builder.Services.AddScoped<IPasswordHasher<Credential>, PasswordHasher<Credential>>();
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
