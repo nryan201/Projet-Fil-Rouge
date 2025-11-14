@@ -14,6 +14,17 @@ Env.Load();
 var jwtKey = Environment.GetEnvironmentVariable("JwtKey") ?? throw new InvalidOperationException("JwtKey manquant");
 
 // Add services to the container.
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:8080") // ton front !
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();  // obligatoire pour envoyer les cookies
+    });
+});
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -25,6 +36,11 @@ builder.Services.AddScoped<CredentialBLL>();
 builder.Services.AddScoped<IPasswordHasher<Credential>, PasswordHasher<Credential>>();
 builder.Services.AddControllers();
 builder.Services.AddJwtAuth(jwtKey);
+builder.Services.AddHttpClient("RteApi", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["ExternalApi:BaseUrl"]!);
+});
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -39,6 +55,9 @@ if (app.Environment.IsDevelopment())
 }
 app.MapHealthChecks("/health/db");
 app.UseHttpsRedirection();
+app.UseCors("AllowFrontend");
+
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -46,3 +65,4 @@ app.MapControllers();
 
 app.Run();
 
+public partial class Program { }

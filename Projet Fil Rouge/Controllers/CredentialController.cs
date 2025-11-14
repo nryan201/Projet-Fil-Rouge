@@ -16,15 +16,15 @@ namespace Projet_Fil_Rouge.Controllers
             _credentialBll = credentialBll;
         }
 
-        [Authorize]
+        [Authorize(Roles = "admin")]
         [HttpGet]
-        [Route("Getcredentials")]
-        public async Task<IActionResult> GetCredentials()
+        [Route("~/allcredentials")]
+        public async Task<IActionResult> GetCredentials([FromQuery] int page = 1,[FromQuery] int pageSize = 10,CancellationToken ct = default)
         {
-
-            var result = await _credentialBll.GetCredentials();
+            var result = await _credentialBll.GetCredentials(page, pageSize, ct);
             return Ok(result);
         }
+
 
         [AllowAnonymous]
         [HttpPost]
@@ -40,26 +40,75 @@ namespace Projet_Fil_Rouge.Controllers
         [Route("login")]
         public async Task<IActionResult> LoginCredential([FromBody] LoginRequest credential)
         {
-            return Ok(await _credentialBll.LoginCredential(credential));
+            // On récupère le résultat complet
+            var result = await _credentialBll.LoginCredential(credential);
 
+            // On stocke le refresh token en HttpOnly Cookie
+            var cookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,               // HTTPS obligatoire
+                SameSite = SameSiteMode.None, // ❤️ Permet d'envoyer le cookie cross-site
+                Expires = DateTime.UtcNow.AddDays(7)
+            };
+
+
+            Response.Cookies.Append("refreshToken", result.RefreshToken, cookieOptions);
+
+            // On renvoie exactement ce que tu veux garder
+            return Ok(result);
         }
 
         [AllowAnonymous]
         [HttpPost("refresh")]
-        public async Task<IActionResult> Refresh([FromBody] RefreshRequest req, CancellationToken ct)
+        public async Task<IActionResult> Refresh(CancellationToken ct)
         {
-            var rsp = await _credentialBll.RefreshAsync(req.RefreshToken, ct);
-            return Ok(rsp); 
+            var oldRefreshToken = Request.Cookies["refreshToken"];
+            if (string.IsNullOrEmpty(oldRefreshToken))
+                return Unauthorized(new { message = "Missing refresh token cookie." });
+
+            // On récupère le nouveau access token ET le nouveau refresh token
+            var rsp = await _credentialBll.RefreshAsync(oldRefreshToken, ct);
+
+            // Mettre à jour le cookie avec le NOUVEAU refresh token
+            var cookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Expires = DateTime.UtcNow.AddDays(7),
+                Path = "/"
+            };
+
+            Response.Cookies.Append("refreshToken", rsp.RefreshToken, cookieOptions);
+
+            return Ok(rsp);
         }
 
 
-        [Authorize]
+
+        [AllowAnonymous]
         [HttpPost("logout")]
-        public async Task<IActionResult> Logout([FromBody] RefreshRequest req, CancellationToken ct)
+        public async Task<IActionResult> Logout(CancellationToken ct)
         {
+            var refreshToken = Request.Cookies["refreshToken"];
+
+            if (string.IsNullOrEmpty(refreshToken))
+                return Unauthorized(new { message = "Missing refresh token cookie." });
+
             try
             {
-                await _credentialBll.RevokeRefreshTokenAsync(req.RefreshToken, ct);
+                await _credentialBll.RevokeRefreshTokenAsync(refreshToken, ct);
+
+                // Supprimer le cookie côté client
+                Response.Cookies.Delete("refreshToken", new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = true,
+                    SameSite = SameSiteMode.None,
+                    Path = "/"
+                });
+
                 return NoContent(); // 204
             }
             catch (InvalidOperationException ex)
@@ -67,5 +116,6 @@ namespace Projet_Fil_Rouge.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
+
     }
 }

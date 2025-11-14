@@ -1,6 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Projet_Fil_Rouge.Entities; 
 
+
+
+namespace Projet_Fil_Rouge.Entities;
 public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }

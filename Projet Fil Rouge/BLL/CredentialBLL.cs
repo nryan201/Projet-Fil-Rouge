@@ -25,24 +25,59 @@ namespace Projet_Fil_Rouge.BLL
             _hasher = hasher;
         }
 
-        public async Task<List<Credential>> GetCredentials(CancellationToken ct = default)
+        public async Task<PagedCredentials> GetCredentials(int page = 1, int pageSize = 10, CancellationToken ct = default)
         {
-            _logger.LogInformation("Retrieving all credentials from the database.");
+            _logger.LogInformation("Retrieving paginated credentials from the database.");
+
+            if (pageSize <= 0)
+                pageSize = 10;
+
             try
             {
-                var users = _db.Credentials
+                var query = _db.Credentials
                     .AsNoTracking()
-                    .OrderBy(c => c.Id)
-                    .ToListAsync(ct);
+                    .OrderBy(c => c.Id);
 
-                return await users;
+                var totalItems = await query.CountAsync(ct);
+
+                var totalPages = totalItems == 0
+                    ? 1
+                    : (int)Math.Ceiling(totalItems / (double)pageSize);
+
+                if (page < 1)
+                    page = 1;
+                if (page > totalPages)
+                    page = totalPages;
+
+                var items = await query
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(c => new CredentialListItem
+                    {
+                        Id = c.Id,
+                        Username = c.Username,
+                        Email = c.Email,
+                        CreatedAt = c.CreatedAt,
+                        Role = c.Role
+                    })
+                    .ToListAsync(ct);
+                return new PagedCredentials
+                {
+                    Items = items,
+                    TotalItems = totalItems,
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalPages = totalPages
+                };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while retrieving credentials.");
+                _logger.LogError(ex, "An error occurred while retrieving paginated credentials.");
                 throw;
             }
         }
+
+
 
         public async Task<string> CreateCredential(CreateCredentialRequest req, CancellationToken ct = default)
         {
@@ -53,6 +88,17 @@ namespace Projet_Fil_Rouge.BLL
                 {
                     _logger.LogWarning("Username already exists.");
                     throw new InvalidOperationException("Username already exists.");
+                }
+                if(await _db.Credentials.AnyAsync(c => c.Email == req.Email, ct))
+                {
+                    _logger.LogWarning("Email already exists.");
+                    throw new InvalidOperationException("Email already exists.");
+                }
+                if (string.IsNullOrWhiteSpace(req.Password)
+                    || req.Password.Length < 6
+                    || !req.Password.Any(char.IsUpper))
+                {
+                    throw new InvalidOperationException("The password must be at least 6 characters long and contain at least one uppercase letter.");
                 }
 
                 var entity = new Credential
@@ -103,7 +149,7 @@ namespace Projet_Fil_Rouge.BLL
                     _logger.LogError("JWT key is missing in environment variables.");
                     throw new InvalidOperationException("JWT key is missing.");
                 }
-
+                var role = string.IsNullOrWhiteSpace(user.Role) ? "user" : user.Role;
                 var rt = new RefreshToken
                 {
                     UserId = user.Id,
@@ -121,7 +167,7 @@ namespace Projet_Fil_Rouge.BLL
                     user.Email,
                     secret,
                     minutes: 60,
-                    roles: new[] { "user" }
+                    roles: new[] { role }
                 );
 
                 return new LoginResponse
@@ -133,7 +179,9 @@ namespace Projet_Fil_Rouge.BLL
                     Username = user.Username,
                     Email = user.Email
                 };
+
             }
+
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while logging in.");
@@ -141,7 +189,7 @@ namespace Projet_Fil_Rouge.BLL
             }
         }
 
-        public async Task<object> RefreshAsync(string refreshToken, CancellationToken ct = default)
+        public async Task<RefreshResponse> RefreshAsync(string refreshToken, CancellationToken ct = default)
         {
             var stored = await _db.RefreshTokens
                 .Include(r => r.User)
@@ -159,13 +207,18 @@ namespace Projet_Fil_Rouge.BLL
                 ExpiresAt = DateTime.UtcNow.AddDays(7)
             };
             _db.RefreshTokens.Add(newRt);
-
+            var role = string.IsNullOrWhiteSpace(stored.User.Role) ? "user" : stored.User.Role;
             var secret = Environment.GetEnvironmentVariable("JwtKey")!;
-            var newAccess = JwtToken.CreateUserToken(stored.User.Id, stored.User.Username, stored.User.Email, secret, minutes: 15);
+            var newAccess = JwtToken.CreateUserToken(stored.User.Id, stored.User.Username, stored.User.Email, secret, minutes: 15, roles: new[] { role });
 
             await _db.SaveChangesAsync(ct);
 
-            return new { AccessToken = newAccess, RefreshToken = newRt.Token, ExpiresIn = 900 };
+            return new RefreshResponse
+            {
+                AccessToken = newAccess,
+                RefreshToken = newRt.Token,
+                ExpiresIn = 900
+            };
         }
 
         public async Task<object> RevokeRefreshTokenAsync(string refreshToken, CancellationToken ct = default)
